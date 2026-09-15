@@ -1,14 +1,17 @@
 # 🛡 Anti-Fraud Core — Data Fusion Contest
 
-Anti-fraud scoring solution: classifying bank transactions that were not confirmed by clients.
+Anti-fraud scoring solution for classifying bank transactions that were not confirmed by clients.
 
-**Result:** PR-AUC = **0.0931**
+**Result:** PR-AUC = **0.0931**  
+**Competition Rank:** **224th place**
 
 ---
 
 ## 🎯 Task
 
-The bank needs to automatically classify transactions that clients **did not confirm** (🔴 — target class, fraud). The input consists of the transaction history of 100,000 clients over 1.5 years, divided into 4 time periods.
+The bank needs to automatically classify transactions that clients **did not confirm** (🔴 — target class, fraud).
+
+The input consists of the transaction history of approximately 100,000 clients over 1.5 years, divided into several time periods.
 
 ### Task Details
 
@@ -18,18 +21,18 @@ The bank needs to automatically classify transactions that clients **did not con
 | **Target Class (🔴)** | ~51,000 transactions (**~0.025%**) — extreme imbalance |
 | **Yellow Light (🟡)** | ~36,000 transactions — suspicious but **confirmed** by clients. **Not the target class.** |
 | **Green Light (🟢)** | All other transactions — confirmed |
-| **Metric** | **PR-AUC** (average precision) |
-| **Validation** | Time-based (no data leakage) |
+| **Metric** | **PR-AUC** (Average Precision) |
+| **Validation** | Time-based / time-aware validation |
 | **Submission Format** | One transaction per client (last day) |
 
 ### Data Periods
 
 | Period | Dates | Labels | Purpose |
-|--------|------|----------|------------|
-| **Pre-train** | 2023-10-01 — 2024-09-30 | ❌ None | Pre-training, historical feature extraction |
+|--------|------|------|----------|
+| **Pre-train** | 2023-10-01 — 2024-09-30 | ❌ None | Historical data for feature extraction |
 | **Train** | 2024-10-01 — 2025-05-31 | 🔴 / 🟡 / 🟢 | Model training |
-| **Pre-test** | 2025-06-01 — 2025-08-09 | ❌ None | Feature extraction for the test set |
-| **Test** | 2025-06-01 — 2025-08-09 | ❓ | Classification (one day per client) |
+| **Pre-test** | 2025-06-01 — 2025-08-09 | ❌ None | Historical data for test feature extraction |
+| **Test** | 2025-06-01 — 2025-08-09 | ❓ | Final classification |
 
 ---
 
@@ -37,32 +40,45 @@ The bank needs to automatically classify transactions that clients **did not con
 
 | Component | Technology | Why |
 |-----------|-----------|--------|
-| Language | **Python 3.11** | Unified language for the entire pipeline |
-| Data processing | **Polars** | 5–10x faster than Pandas on 200M rows; lazy API; efficient rolling windows |
-| ML model | **CatBoost** | Best performance on tabular data with categorical features (MCC codes) |
-| Parquet processing | **PyArrow** | Fast read/write |
-| Metric | **scikit-learn** (`average_precision_score`) | PR-AUC |
-| DataFrame | **Pandas** | Final submission assembly |
-| Numerical operations | **NumPy** | Array operations |
+| Language | **Python 3.11** | Main development language |
+| Data processing | **Polars** | Efficient processing of very large datasets |
+| ML model | **CatBoost** | Strong performance on tabular data and categorical features |
+| Parquet processing | **PyArrow** | Efficient columnar data processing |
+| Metric | **scikit-learn** | PR-AUC / Average Precision |
+| DataFrame | **Pandas** | Model input and submission assembly |
+| Numerical operations | **NumPy** | Numerical processing |
 
 > 💡 **Why Polars instead of Pandas?**
-> Volume > 200M rows. Pandas loads everything into memory and lacks lazy evaluation. Polars uses an Arrow backend, supports streaming, and is significantly faster for rolling operations (`rolling`, `group_by`, `over`).
+>
+> The dataset contains more than 200M transactions, so memory-efficient data processing is critical.
+>
+> Polars provides efficient columnar operations, lazy evaluation, grouping, and rolling-window operations that are useful for large-scale feature engineering.
 
 ---
 
 ## 🏗 Approach
 
-### 1. Class Handling
+The solution focuses on **customer behavior and temporal transaction patterns** rather than relying only on individual transaction attributes.
 
-The original labeling contains three categories:
-- 🔴 **target = 1** — unconfirmed transactions (fraud).
-- 🟢 **target = 0** — confirmed transactions.
-- 🟡 **target = -1** — suspicious, yet confirmed by clients. **Non-target class.**
+The main pipeline:
 
-**Sampling strategy:**
-
-```python
-fraud_data = part.filter(pl.col("target").is_in([0, 1]))       # all 🔴 and 🟢
-clean_data = part.filter(pl.col("target") == -1).sample(
-fraction=0.1, seed=42                                       # 10% of the "gray mass"
-)
+```text
+Raw Parquet Data
+       ↓
+Large-scale preprocessing
+       ↓
+Historical customer statistics
+       ↓
+Rolling time-window features
+       ↓
+Temporal features
+       ↓
+Behavioral features
+       ↓
+Class handling
+       ↓
+CatBoost
+       ↓
+Fraud probability
+       ↓
+Submission
